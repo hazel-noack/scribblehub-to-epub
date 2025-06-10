@@ -156,7 +156,9 @@ class ScribbleChapter:
             mimetypes.init(None)
 
         for asset in soup.select("#chp_contents img[src]"):
-            self.add_asset(asset["src"])
+            a = self.add_asset(asset["src"])
+            if a is not None:
+                asset["src"] = a.relpath
             
         header_tag = soup.new_tag("h2")
         header_tag.string = self.title
@@ -238,7 +240,11 @@ class ScribbleBook:
             f")"
         )
 
-    def __init__(self, url: str):
+    @cached_property
+    def file_name(self) -> str:
+        return f"{self.author} - {self.title}.epub"
+
+    def __init__(self, url: str, file_name: Optional[str] = None):
         self.source_url = url
         self.assets: Dict[str, Asset] = {}
         
@@ -249,7 +255,7 @@ class ScribbleBook:
         self.chapters: List[ScribbleChapter] = []
         self.session = cloudscraper.create_scraper()
 
-    def add_asset(self, url: str):
+    def add_asset(self, url: str) -> Optional[Asset]:
         if url is None:
             return
         if url.strip() == "":
@@ -258,6 +264,7 @@ class ScribbleBook:
         a = Asset(url, self.session)
         if a.success:
             self.assets[a.url] = a
+            return a
         else:
             log.warning(f"couldn't fetch asset {url}")
 
@@ -429,7 +436,7 @@ class ScribbleBook:
         )
         intro.add_item(nav_css)
         book.add_item(intro)
-        
+
         for chapter in self.chapters:
             c = epub.EpubHtml(
                 title=chapter.title,
@@ -451,3 +458,6 @@ class ScribbleBook:
         # create spine, add cover page as first page
         book.spine = ["cover", "intro", "nav"]
         book.spine.extend(toc_chap_list)
+
+        # create epub file
+        epub.write_epub(self.file_name, book, {})
