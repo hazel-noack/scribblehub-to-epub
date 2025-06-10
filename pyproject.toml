@@ -1,7 +1,6 @@
 [project]
 name = "scribble_to_epub"
 dependencies = []
-dynamic = ["version"]
 authors = []
 description = "This scrapes books from https://www.scribblehub.com/ and  creates epub from them"
 readme = "README.md"
@@ -10,6 +9,10 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+]
+version = "0.0.0"
+license-files = [
+    "LICENSE"
 ]
 
 [project.scripts]
@@ -30,6 +33,3 @@ packages = ["scribble_to_epub"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
-
-[tool.hatch.version]
-path = "scribble_to_epub/__about__.py"
