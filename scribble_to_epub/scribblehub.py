@@ -394,3 +394,17 @@ class ScribbleBook:
         if self.cover_url is not None and self.cover_url in self.assets:
             cover = self.assets[self.cover_url]
             book.set_cover(f"cover{cover.ext}", cover.content)
+
+        # add style
+        style_path = Path(__assets__, "scribblehub.css")
+        if style_path.exists():
+            styles = style_path.read_text("utf-8")
+            nav_css = epub.EpubItem(
+                uid="style_nav",
+                file_name="style/nav.css",
+                media_type="text/css",
+                content=styles,
+            )
+            book.add_item(nav_css)
+        else:
+            log.warning("couldn't find styles in %s", str(style_path))
