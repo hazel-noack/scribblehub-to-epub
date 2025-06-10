@@ -49,6 +49,8 @@ DATE_MATCH = re.compile("Last updated: .*")
 temp_path = Path("/tmp", __name__)
 temp_path.mkdir(exist_ok=True)
 
+__assets__ = str(Path(Path(__file__).parent, "assets"))
+
 
 class Asset:
     """
