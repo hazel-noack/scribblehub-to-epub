@@ -18,7 +18,7 @@ def cli():
 
     print(f"Running scribble_to_epub for URL: {args.url}")
 
-    scribble_book = ScribbleBook(args.url)
+    scribble_book = ScribbleBook(args.url, disable_author_quotes=True)
     scribble_book.load(limit_chapters=1)
     scribble_book.build()
 

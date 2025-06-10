@@ -144,6 +144,10 @@ class ScribbleChapter:
         resp = self.session.get(self.source_url, headers=headers)
         soup = BeautifulSoup(resp.text, "lxml")
 
+        if self.parent.disable_author_quotes:
+            for tag in soup.select('.wi_authornotes'):
+                tag.decompose()
+
         for tag in soup.find_all(lambda x: x.has_attr("lang")):
             if tag["lang"] not in self.parent.languages:
                 log.debug(f'Found language {tag["lang"]}')
@@ -244,9 +248,11 @@ class ScribbleBook:
     def file_name(self) -> str:
         return f"{self.author} - {self.title}.epub"
 
-    def __init__(self, url: str, file_name: Optional[str] = None):
+    def __init__(self, url: str, file_name: Optional[str] = None, disable_author_quotes: bool = False):
         self.source_url = url
         self.assets: Dict[str, Asset] = {}
+
+        self.disable_author_quotes = disable_author_quotes
         
         self.languages = []
         self.genres = []
@@ -254,6 +260,9 @@ class ScribbleBook:
 
         self.chapters: List[ScribbleChapter] = []
         self.session = cloudscraper.create_scraper()
+
+        if file_name is not None:
+            self.file_name = file_name
 
     def add_asset(self, url: str) -> Optional[Asset]:
         if url is None:
