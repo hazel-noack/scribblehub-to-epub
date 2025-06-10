@@ -18,6 +18,7 @@ import requests
 
 from . import __name__
 
+"""
 try:
     import http.client as http_client
 except ImportError:
@@ -31,7 +32,7 @@ logging.getLogger().setLevel(logging.DEBUG)
 requests_log = logging.getLogger("requests.packages.urllib3")
 requests_log.setLevel(logging.DEBUG)
 requests_log.propagate = True
-
+"""
 
 
 log = logging.getLogger(__name__)
@@ -260,7 +261,7 @@ class ScribbleBook:
         print(str(self))
 
         self.fetch_chapters(limit=limit_chapters)
-        for chapter in self.chapters:
+        for chapter in self.chapters[:limit_chapters if limit_chapters is not None else len(self.chapters)]:
             print(str(chapter))
             chapter.load()
 
@@ -277,7 +278,6 @@ class ScribbleBook:
         self.identifier = _parts[-2]
 
         html = self.session.get(self.source_url, headers=headers)
-        print(html)
 
         html = self.session.get(self.source_url)
         soup = BeautifulSoup(html.text, "lxml")
