@@ -73,16 +73,17 @@ class Asset:
     @cached_property
     def ext(self) -> str:
         return mimetypes.guess_extension(self.mimetype)
+    
+    @cached_property
+    def uid(self) -> str:
+        """
+        SHA-1 hash of the URL
+        """
+        return sha1(encode(self.url, "utf-8")).hexdigest()
 
     @cached_property
     def filename(self) -> str:
-        """
-        "{fname}{ext}"
-        - fname`: a SHA-1 hash of the URL
-        - `ext`: a mimetypes guessed extension
-        """
-        fname = sha1(encode(self.url, "utf-8")).hexdigest()
-        return f"{fname}{self.ext}"
+        return f"{self.uid}{self.ext}"
     
     @cached_property
     def relpath(self) -> str:
@@ -408,3 +409,14 @@ class ScribbleBook:
             book.add_item(nav_css)
         else:
             log.warning("couldn't find styles in %s", str(style_path))
+
+        # add assets from the web
+        for asset in self.assets.values():
+            book.add_item(
+                epub.EpubImage(
+                    uid=asset.uid,
+                    file_name=asset.relpath,
+                    media_type=asset.mimetype,
+                    content=asset.content,
+                )
+            )
