@@ -18,7 +18,8 @@ def cli():
 
     print(f"Running scribble_to_epub for URL: {args.url}")
 
-    ScribbleBook(args.url)
+    scribble_book = ScribbleBook(args.url)
+    scribble_book.load(limit_chapters=1)
 
 
 if __name__ == "__main__":
