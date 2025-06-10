@@ -9,6 +9,7 @@ import arrow
 import ftfy
 from typing import Iterable, List
 import re
+import mimetypes
 import math
 
 try:
@@ -37,51 +38,6 @@ CHAPTER_MATCH = re.compile(
 STORY_MATCH = re.compile(r"(?P<url_root>.*)/series/(?P<story_id>\d*)/(?P<slug>[a-z-]*)")
 DATE_MATCH = re.compile("Last updated: .*")
 
-
-class BookMetadata:
-    """
-    Represents the metadata for the book
-    """
-
-    slug: str
-    title: str
-    languages: Iterable[str]    # Dublin-core language codes
-    cover_url: str
-    date: arrow.Arrow
-    description: str
-    author: str
-    publisher: str
-    identifier: str # unique identifier (e.g. UUID, hosting site book ID, ISBN, etc.)
-    genres: Iterable[str]
-    tags: Iterable[str]
-    
-    @cached_property
-    def rights(self) -> str:
-        return f"© {self.date.year} {self.author}"
-
-    def __init__(self):
-        self.languages = []
-        self.genres = []
-        self.tags = []
-
-    def __str__(self):
-        return (
-            f"BookMetadata(\n"
-            f"  Title: {self.title}\n"
-            f"  Author: {self.author}\n"
-            f"  Identifier: {self.identifier}\n"
-            f"  Languages: {', '.join(self.languages)}\n"
-            f"  Published: {self.date.format('YYYY-MM-DD') if self.date else 'Unknown'}\n"
-            f"  Publisher: {self.publisher}\n"
-            f"  Genres: {', '.join(self.genres)}\n"
-            f"  Tags: {', '.join(self.tags)}\n"
-            f"  Rights: {self.rights}\n"
-            f"  Cover URL: {self.cover_url}\n"
-            f"  Description: {self.description[:75]}{'...' if len(self.description) > 75 else ''}\n"
-            f")"
-        )
-
-
 class ScribbleChapter:
     parent: ScribbleBook
 
@@ -90,9 +46,11 @@ class ScribbleChapter:
     text: str   # HTML content of chapter
     date: arrow.Arrow
 
-    def __init__(self, parent: ScribbleBook, url: str):
+    def __init__(self, parent: ScribbleBook, url: str, session: cloudscraper.CloudScraper):
         self.parent = parent
         self.source_url = url
+
+        self.session = session
 
     def __str__(self):
         return (
@@ -103,6 +61,95 @@ class ScribbleChapter:
             f"  Url: {self.source_url}\n"
             f")"
         )
+    
+    def load(self):
+        resp = self.session.get(self.source_url, headers=headers)
+        soup = BeautifulSoup(resp.text, "lxml")
+
+        for tag in soup.find_all(lambda x: x.has_attr("lang")):
+            if tag["lang"] not in self.parent.languages:
+                log.debug(f'Found language {tag["lang"]}')
+                self.parent.languages.append(tag["lang"])
+
+        self.title = soup.find(class_="chapter-title").text
+        log.info(f"{self.parent.title} Chapter {self.index}: {self.title}")
+
+        if not mimetypes.inited:
+            mimetypes.init(None)
+
+        """
+        for asset in soup.select("#chp_contents img[src]"):
+            if asset["src"] not in self.assets:
+                log.debug(f'Found asset at {asset["src"]}')
+                try:
+                    asset_resp = session.get(asset["src"], headers=headers)
+                except HTTPError as e:
+                    # just remove the asset from HTML if we have fetch issues
+                    log.warning(
+                        f'Issue fetching asset {asset["src"]} because "{e.response.status_code}: {e.response.reason}"'
+                    )
+                    asset.extract()
+                    continue
+                fname = sha1(encode(asset["src"], "utf-8")).hexdigest()
+                mimetype, _ = mimetypes.guess_type(asset["src"])
+                log.debug(f"Asset is {mimetype}")
+                ext = mimetypes.guess_extension(mimetype)
+                relpath = f"static/{fname}{ext}"
+                self.assets[asset["src"]] = {
+                    "content": asset_resp.content,
+                    "relpath": relpath,
+                    "mimetype": mimetype,
+                    "uid": fname,
+                }
+            else:
+                relpath = self.assets[asset["src"]]["relpath"]
+            log.debug(f"Updating asset to {relpath} from {asset['src']}")
+            asset["src"] = relpath
+        """
+            
+        header_tag = soup.new_tag("h2")
+        header_tag.string = self.title
+        chap_text = soup.find(class_="chp_raw").extract()
+        chap_text.insert(0, header_tag)
+        self.text = ftfy.fix_text(chap_text.prettify())
+        self.fix_footnotes()
+
+    def fix_footnotes(self):
+        """
+        Iterate through any footnotes and refactor them to ePub format
+        """
+        soup = BeautifulSoup(self.text, "lxml")
+        footnotes = []
+        for tag in soup.select(".modern-footnotes-footnote"):
+            mfn = tag["data-mfn"].text
+            log.debug(f"Found footnote {mfn}")
+            anchor = tag.find_all("a")[-1]
+            content_tag_element = soup.select(
+                f".modern-footnotes-footnote__note[data-mfn={mfn}]"
+            )
+            content_tag = content_tag_element[0]
+            if not anchor or not content_tag:
+                return
+            anchor["id"] = f"noteanchor-{mfn}"
+            anchor["href"] = f"#note-{mfn}"
+            anchor["epub:type"] = "noteref"
+
+            content_tag.name = "aside"
+            content_tag["id"] = f"note-{mfn}"
+            content_tag["epub:type"] = "footnote"
+            footnote_anchor = soup.new_tag("a", href=f"#noteanchor-{mfn}")
+            footnote_anchor.string = f"{mfn}."
+            content_tag_element.insert(0, footnote_anchor)
+            footnotes.append(content_tag_element)
+        if footnotes:
+            tag = soup.find_all("p")[-1]
+            footnote_header = soup.new_tag("h2", id="footnotes")
+            footnote_header.string = "Footnotes"
+            tag.append(footnote_header)
+            tag.extend(footnotes)
+
+        soup.smooth()
+        self.text = ftfy.fix_text(soup.prettify())
     
 
 
@@ -157,6 +204,9 @@ class ScribbleBook:
         print(str(self))
 
         self.get_chapters()
+        c = self.chapters[0]
+        c.load()
+        print(c.text)
 
     def load_metadata(self) -> None:
         """
@@ -229,7 +279,7 @@ class ScribbleBook:
 
             chapter_soup = BeautifulSoup(chapter_resp.text, "lxml")
             for chapter_tag in chapter_soup.find_all(class_="toc_w"):
-                chapter = ScribbleChapter(self, chapter_tag.a["href"])
+                chapter = ScribbleChapter(self, chapter_tag.a["href"], self.session)
                 chapter.index = int(chapter_tag["order"])
                 chapter.title = chapter_tag.a.text
                 chapter.date = arrow.get(
