@@ -15,6 +15,7 @@ from codecs import encode
 from hashlib import sha1
 from pathlib import Path
 import requests
+import uuid
 
 from . import __name__
 
@@ -209,13 +210,10 @@ class ScribbleBook:
     identifier: str # unique identifier (e.g. UUID, hosting site book ID, ISBN, etc.)
     genres: List[str]
     tags: List[str]
+    rights: str
 
     chapter_count: int
     
-    @cached_property
-    def rights(self) -> str:
-        return f"© {self.date.year} {self.author}"
-
     def __str__(self):
         return (
             f"BookMetadata(\n"
@@ -313,6 +311,7 @@ class ScribbleBook:
 
 
         imgs = soup.find(class_="sb_content copyright").find_all("img")
+        self.rights = ""
         for img in imgs:
             if "copy" not in img["class"]:
                 continue
@@ -354,4 +353,26 @@ class ScribbleBook:
         self.chapters.sort(key=lambda x: x.index)
 
     def build(self): 
-        pass
+        book = epub.EpubBook()
+        
+        # set up metadata
+        book.add_metadata("DC", "identifier", f"uuid:{uuid.uuid4()}", {"id": "BookId"})
+        book.add_metadata(
+            "DC", "identifier", f"url:{self.source_url}", {"id": "Source"}
+        )
+        book.add_metadata("DC", "subject", ",".join(self.tags), {"id": "tags"})
+        book.add_metadata(
+            "DC", "subject", ",".join(self.genres), {"id": "genre"}
+        )
+        book.set_title(self.title)
+
+        book.add_metadata("DC", "date", self.date.isoformat())
+        book.add_author(self.author)
+        book.add_metadata("DC", "publisher", self.publisher)
+        book.add_metadata(
+            "DC",
+            "rights",
+            f"Copyright © {self.date.year} {self.author} {self.rights}",
+        )
+        book.add_metadata("DC", "description", self.description)
+
