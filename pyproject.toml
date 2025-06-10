@@ -23,6 +23,10 @@ license-files = [
 [project.scripts]
 scribble-to-epub = "scribble_to_epub.__main__:cli"
 
+[project.urls]
+Homepage = "https://gitea.elara.ws/Hazel/scribble_to_epub"
+Issues = "https://gitea.elara.ws/Hazel/scribble_to_epub/issues"
+
 [build-system]
 requires = ["hatchling", "hatch-requirements-txt"]
 build-backend = "hatchling.build"
