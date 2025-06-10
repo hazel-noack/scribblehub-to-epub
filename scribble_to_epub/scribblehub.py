@@ -16,6 +16,7 @@ from hashlib import sha1
 from pathlib import Path
 import requests
 import uuid
+import time
 
 from . import __name__
 
@@ -50,6 +51,29 @@ temp_path = Path("/tmp", __name__)
 temp_path.mkdir(exist_ok=True)
 
 __assets__ = str(Path(Path(__file__).parent, "assets"))
+
+
+REQUEST_DELAY = 3   # in seconds
+ADDITIONAL_DELAY_PER_TRY = 1
+last_request = 0
+def get_request(session: requests.Session, url: str, attempt: int = 0) -> requests.Response:
+    global last_request, REQUEST_DELAY, ADDITIONAL_DELAY_PER_TRY
+    
+    current_delay = REQUEST_DELAY + (ADDITIONAL_DELAY_PER_TRY * attempt)
+    elapsed_time = time.time() - last_request
+    to_wait = current_delay - elapsed_time
+
+    if to_wait > 0:
+        print(f"waiting {to_wait} at attempt {attempt}: {url}")
+        time.sleep(to_wait)
+
+    last_request = time.time()
+    resp = session.get(url, headers=headers)
+
+    if resp.status_code == 429:
+        return get_request(session, url, attempt=attempt + 1)
+    
+    return resp
 
 
 class Asset:
@@ -104,7 +128,7 @@ class Asset:
             return
         
         try:
-            r = self.session.get(self.url, headers=headers)
+            r = get_request(self.session, self.url)
             self.content = r.content
             temp.write_bytes(r.content)
             self.success = True
@@ -141,7 +165,7 @@ class ScribbleChapter:
         )
     
     def load(self):
-        resp = self.session.get(self.source_url, headers=headers)
+        resp = get_request(self.session, self.source_url)
         soup = BeautifulSoup(resp.text, "lxml")
 
         if self.parent.disable_author_quotes:
@@ -153,7 +177,8 @@ class ScribbleChapter:
                 log.debug(f'Found language {tag["lang"]}')
                 self.parent.languages.append(tag["lang"])
 
-        self.title = soup.find(class_="chapter-title").text
+        t = soup.find(class_="chapter-title")
+        self.title = t.text
         log.info(f"{self.parent.title} Chapter {self.index}: {self.title}")
 
         if not mimetypes.inited:
@@ -279,14 +304,14 @@ class ScribbleBook:
 
     def load(self, limit_chapters: Optional[int] = None):
         self.load_metadata()
-        print(str(self))
+        print(f"{self.title} by {self.author}:")
 
         self.fetch_chapters(limit=limit_chapters)
         if limit_chapters is not None:
             self.chapters = self.chapters[:limit_chapters]
 
         for chapter in self.chapters:
-            print(str(chapter))
+            print(f"- {chapter.title}")
             chapter.load()
 
     def load_metadata(self) -> None:
@@ -300,10 +325,8 @@ class ScribbleBook:
         self.slug = _parts[-1]
         self.identifier = _parts[-2]
 
-        html = self.session.get(self.source_url, headers=headers)
-
-        html = self.session.get(self.source_url)
-        soup = BeautifulSoup(html.text, "lxml")
+        resp = get_request(self.session, self.source_url)
+        soup = BeautifulSoup(resp.text, "lxml")
 
         for tag in soup.find_all(lambda x: x.has_attr("lang")):
             log.debug(f'Found language {tag["lang"]}')
