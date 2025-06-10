@@ -64,7 +64,7 @@ def get_request(session: requests.Session, url: str, attempt: int = 0) -> reques
     to_wait = current_delay - elapsed_time
 
     if to_wait > 0:
-        print(f"waiting {to_wait} at attempt {attempt}: {url}")
+        log.info(f"waiting {to_wait} at attempt {attempt}: {url}")
         time.sleep(to_wait)
 
     last_request = time.time()
@@ -304,14 +304,14 @@ class ScribbleBook:
 
     def load(self, limit_chapters: Optional[int] = None):
         self.load_metadata()
-        print(f"{self.title} by {self.author}:")
+        print(f"{self.title} by {self.author} with {self.chapter_count} chapters:")
 
         self.fetch_chapters(limit=limit_chapters)
         if limit_chapters is not None:
             self.chapters = self.chapters[:limit_chapters]
 
-        for chapter in self.chapters:
-            print(f"- {chapter.title}")
+        for i, chapter in enumerate(self.chapters):
+            print(f"- {i+1}: {chapter.title}")
             chapter.load()
 
     def load_metadata(self) -> None:
@@ -337,7 +337,6 @@ class ScribbleBook:
             log.warning(f"Metadata URL mismatch!\n\t{self.source_url}\n\t{url}")
 
         self.title = soup.find(property="og:title")["content"]
-        print(f"Book Title: {self.title}")
 
         self.cover_url = soup.find(property="og:image")["content"] or ""
         self.add_asset(self.cover_url)
