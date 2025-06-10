@@ -261,10 +261,12 @@ class ScribbleBook:
         print(str(self))
 
         self.fetch_chapters(limit=limit_chapters)
-        for chapter in self.chapters[:limit_chapters if limit_chapters is not None else len(self.chapters)]:
+        if limit_chapters is not None:
+            self.chapters = self.chapters[:limit_chapters]
+
+        for chapter in self.chapters:
             print(str(chapter))
             chapter.load()
-
 
     def load_metadata(self) -> None:
         """
@@ -350,3 +352,6 @@ class ScribbleBook:
                 self.chapters.append(chapter)
 
         self.chapters.sort(key=lambda x: x.index)
+
+    def build(self): 
+        pass
