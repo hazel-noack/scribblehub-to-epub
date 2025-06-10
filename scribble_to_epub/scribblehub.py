@@ -120,6 +120,7 @@ class ScribbleChapter:
         self.source_url = url
 
         self.session = session
+        self.add_asset = self.parent.add_asset
 
     def __str__(self):
         return (
@@ -146,35 +147,8 @@ class ScribbleChapter:
         if not mimetypes.inited:
             mimetypes.init(None)
 
-        """
         for asset in soup.select("#chp_contents img[src]"):
-            if asset["src"] not in self.assets:
-                log.debug(f'Found asset at {asset["src"]}')
-                try:
-                    asset_resp = session.get(asset["src"], headers=headers)
-                except HTTPError as e:
-                    # just remove the asset from HTML if we have fetch issues
-                    log.warning(
-                        f'Issue fetching asset {asset["src"]} because "{e.response.status_code}: {e.response.reason}"'
-                    )
-                    asset.extract()
-                    continue
-                fname = sha1(encode(asset["src"], "utf-8")).hexdigest()
-                mimetype, _ = mimetypes.guess_type(asset["src"])
-                log.debug(f"Asset is {mimetype}")
-                ext = mimetypes.guess_extension(mimetype)
-                relpath = f"static/{fname}{ext}"
-                self.assets[asset["src"]] = {
-                    "content": asset_resp.content,
-                    "relpath": relpath,
-                    "mimetype": mimetype,
-                    "uid": fname,
-                }
-            else:
-                relpath = self.assets[asset["src"]]["relpath"]
-            log.debug(f"Updating asset to {relpath} from {asset['src']}")
-            asset["src"] = relpath
-        """
+            self.add_asset(asset["src"])
             
         header_tag = soup.new_tag("h2")
         header_tag.string = self.title
