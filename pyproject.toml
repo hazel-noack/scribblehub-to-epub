@@ -4,6 +4,8 @@ dependencies = [
     'beautifulsoup4',
     'requests',
     'EbookLib',
+    'arrow',
+    'ftfy',
 ]
 authors = []
 description = "This scrapes books from https://www.scribblehub.com/ and  creates epub from them"
