@@ -241,16 +241,7 @@ class ScribbleBook:
         self.tags = []
 
         self.chapters: List[ScribbleChapter] = []
-
-        # fetching metadata
         self.session = cloudscraper.create_scraper()
-        self.load_metadata()
-        print(str(self))
-
-        self.get_chapters()
-        c = self.chapters[0]
-        c.load()
-        print(c.text)
 
     def add_asset(self, url: str):
         if url is None:
@@ -263,6 +254,16 @@ class ScribbleBook:
             self.assets[a.url] = a
         else:
             log.warning(f"couldn't fetch asset {url}")
+
+    def load(self, limit_chapters: Optional[int] = None):
+        self.load_metadata()
+        print(str(self))
+
+        self.fetch_chapters(limit=limit_chapters)
+        for chapter in self.chapters:
+            print(str(chapter))
+            chapter.load()
+
 
     def load_metadata(self) -> None:
         """
@@ -315,7 +316,7 @@ class ScribbleBook:
                 continue
             self.rights = ftfy.fix_text(img.next.string)
 
-    def get_chapters(self) -> None:
+    def fetch_chapters(self, limit: Optional[int] = None) -> None:
         """
         Fetch the chapters for the work, based on the TOC API
         """
@@ -323,6 +324,9 @@ class ScribbleBook:
         log.debug(
             f"Expecting {self.chapter_count} chapters, page_count={page_count}"
         )
+
+        if limit is not None:
+            page_count = min(page_count, limit)
 
         for page in range(1, page_count + 1):
             chapter_resp = self.session.post(
@@ -346,6 +350,3 @@ class ScribbleBook:
                 self.chapters.append(chapter)
 
         self.chapters.sort(key=lambda x: x.index)
-
-        for c in self.chapters:
-            print(str(c))
