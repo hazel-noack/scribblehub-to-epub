@@ -1,6 +1,10 @@
 [project]
 name = "scribble_to_epub"
-dependencies = []
+dependencies = [
+    'beautifulsoup4',
+    'requests',
+    'EbookLib',
+]
 authors = []
 description = "This scrapes books from https://www.scribblehub.com/ and  creates epub from them"
 readme = "README.md"

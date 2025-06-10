@@ -1,5 +1,7 @@
 import argparse
 
+from .scribblehub import ScribbleBook
+
 
 def cli():
     parser = argparse.ArgumentParser(
@@ -15,7 +17,8 @@ def cli():
     args = parser.parse_args()
 
     print(f"Running scribble_to_epub for URL: {args.url}")
-    # You would call your main scraping and EPUB creation logic here
+
+    ScribbleBook(args.url)
 
 
 if __name__ == "__main__":
