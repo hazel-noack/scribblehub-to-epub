@@ -7,10 +7,16 @@ import logging
 import cloudscraper
 import arrow
 import ftfy
-from typing import Iterable, List
+from typing import List, Optional, Dict
 import re
 import mimetypes
 import math
+from codecs import encode
+from hashlib import sha1
+from pathlib import Path
+import requests
+
+from . import __name__
 
 try:
     import http.client as http_client
@@ -37,6 +43,69 @@ CHAPTER_MATCH = re.compile(
 )
 STORY_MATCH = re.compile(r"(?P<url_root>.*)/series/(?P<story_id>\d*)/(?P<slug>[a-z-]*)")
 DATE_MATCH = re.compile("Last updated: .*")
+
+temp_path = Path("/tmp", __name__)
+temp_path.mkdir(exist_ok=True)
+
+
+class Asset:
+    """
+    - `content`: the `bytes` content of the image
+    - `relpath`: "static/{fname}{ext}"
+        - `fname`: a SHA-1 hash of the URL
+        - `ext`: a mimetypes guessed extension
+    - `mimetype`: mimetype of the asset
+    - `uid`: `fname`
+    """
+    success: bool = False
+    url: str        # indexes by url
+    content: bytes  # content of asset
+
+    @cached_property
+    def mimetype(self) -> str:
+        mimetype, _ = mimetypes.guess_type(self.url)
+        return mimetype
+
+    @cached_property
+    def filename(self) -> str:
+        """
+        "{fname}{ext}"
+        - fname`: a SHA-1 hash of the URL
+        - `ext`: a mimetypes guessed extension
+        """
+        fname = sha1(encode(self.url, "utf-8")).hexdigest()
+        ext = mimetypes.guess_extension(self.mimetype)
+        return f"{fname}{ext}"
+    
+    @cached_property
+    def relpath(self) -> str:
+        return f"static/{self.filename}"
+
+    def __init__(self, url: str, session: Optional[requests.Session] = None):
+        self.url = url
+        self.session = session or requests.Session()
+
+        self.fetch()
+
+    def fetch(self):
+        temp = Path(temp_path, self.filename)
+
+        if temp.exists():
+            self.content = temp.read_bytes()
+            self.success = True
+            return
+        
+        try:
+            r = self.session.get(self.url, headers=headers)
+            self.content = r.content
+            temp.write_bytes(r.content)
+            self.success = True
+        except requests.HTTPError as e:
+            log.warning(
+                f'Issue fetching asset {self.url} because "{e.response.status_code}: {e.response.reason}"'
+            )
+
+
 
 class ScribbleChapter:
     parent: ScribbleBook
@@ -191,6 +260,7 @@ class ScribbleBook:
 
     def __init__(self, url: str):
         self.source_url = url
+        self.assets: Dict[str, Asset] = {}
         
         self.languages = []
         self.genres = []
@@ -207,6 +277,18 @@ class ScribbleBook:
         c = self.chapters[0]
         c.load()
         print(c.text)
+
+    def add_asset(self, url: str):
+        if url is None:
+            return
+        if url.strip() == "":
+            return
+        
+        a = Asset(url, self.session)
+        if a.success:
+            self.assets[a.url] = a
+        else:
+            log.warning(f"couldn't fetch asset {url}")
 
     def load_metadata(self) -> None:
         """
@@ -237,6 +319,8 @@ class ScribbleBook:
         print(f"Book Title: {self.title}")
 
         self.cover_url = soup.find(property="og:image")["content"] or ""
+        self.add_asset(self.cover_url)
+
         self.date = arrow.get(
             soup.find("span", title=DATE_MATCH)["title"][14:], "MMM D, YYYY hh:mm A"
         )
