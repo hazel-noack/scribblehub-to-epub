@@ -67,6 +67,10 @@ class Asset:
     def mimetype(self) -> str:
         mimetype, _ = mimetypes.guess_type(self.url)
         return mimetype
+    
+    @cached_property
+    def ext(self) -> str:
+        return mimetypes.guess_extension(self.mimetype)
 
     @cached_property
     def filename(self) -> str:
@@ -76,8 +80,7 @@ class Asset:
         - `ext`: a mimetypes guessed extension
         """
         fname = sha1(encode(self.url, "utf-8")).hexdigest()
-        ext = mimetypes.guess_extension(self.mimetype)
-        return f"{fname}{ext}"
+        return f"{fname}{self.ext}"
     
     @cached_property
     def relpath(self) -> str:
@@ -376,3 +379,16 @@ class ScribbleBook:
         )
         book.add_metadata("DC", "description", self.description)
 
+        # set languages; assume the first one is the "main" language
+        main_lang = self.languages[0]
+        book.set_language(main_lang)
+        if len(self.languages) > 1:
+            langs = set(self.languages[1:])
+            langs.remove(main_lang)
+            for lang in langs:
+                book.add_metadata("DC", "language", lang)
+
+        # add cover image
+        if self.cover_url is not None and self.cover_url in self.assets:
+            cover = self.assets[self.cover_url]
+            book.set_cover(f"cover{cover.ext}", cover.content)
