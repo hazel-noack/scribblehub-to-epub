@@ -20,6 +20,7 @@ def cli():
 
     scribble_book = ScribbleBook(args.url)
     scribble_book.load(limit_chapters=1)
+    scribble_book.build()
 
 
 if __name__ == "__main__":
