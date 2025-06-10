@@ -210,6 +210,7 @@ class ScribbleBook:
     languages: List[str]    # Dublin-core language codes
     cover_url: str
     date: arrow.Arrow
+    intro: str
     description: str
     author: str
     publisher: str
@@ -420,3 +421,32 @@ class ScribbleBook:
                     content=asset.content,
                 )
             )
+
+        # add chapters
+        toc_chap_list = []
+        intro = epub.EpubHtml(
+            title="Introduction", file_name="intro.xhtml", content=self.intro
+        )
+        intro.add_item(nav_css)
+        book.add_item(intro)
+        for chapter in self.chapters:
+            c = epub.EpubHtml(
+                title=chapter.title,
+                file_name=f"chapter{chapter.index}.xhtml",
+                content=chapter.text,
+            )
+            c.add_item(nav_css)
+            book.add_item(c)
+            toc_chap_list.append(c)
+
+        # set up toc
+        book.toc = [
+            epub.Link("intro.xhtml", "Introduction", "intro"),
+        ]
+        book.toc.extend(toc_chap_list)
+        book.add_item(epub.EpubNcx())
+        book.add_item(epub.EpubNav())
+
+        # create spine, add cover page as first page
+        book.spine = ["cover", "intro", "nav"]
+        book.spine.extend(toc_chap_list)
