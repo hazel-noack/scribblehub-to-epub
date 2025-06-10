@@ -429,6 +429,7 @@ class ScribbleBook:
         )
         intro.add_item(nav_css)
         book.add_item(intro)
+        
         for chapter in self.chapters:
             c = epub.EpubHtml(
                 title=chapter.title,
