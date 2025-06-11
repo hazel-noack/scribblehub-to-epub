@@ -17,6 +17,7 @@ from pathlib import Path
 import requests
 import uuid
 import time
+from python_requests import Connection, set_cache_directory
 
 from . import __name__
 
@@ -36,10 +37,9 @@ requests_log.setLevel(logging.DEBUG)
 requests_log.propagate = True
 """
 
-
+set_cache_directory(Path("/tmp", __name__))
 log = logging.getLogger(__name__)
 
-headers = {"User-Agent": "node"}
 
 CHAPTER_MATCH = re.compile(
     r"(?P<url_root>.*)/read/(?P<story_id>\d*)-(?P<slug>.*?)/chapter/(?P<chapter_id>\d*)"
@@ -47,33 +47,9 @@ CHAPTER_MATCH = re.compile(
 STORY_MATCH = re.compile(r"(?P<url_root>.*)/series/(?P<story_id>\d*)/(?P<slug>[a-z-]*)")
 DATE_MATCH = re.compile("Last updated: .*")
 
-temp_path = Path("/tmp", __name__)
-temp_path.mkdir(exist_ok=True)
-
 __assets__ = str(Path(Path(__file__).parent, "assets"))
 
 
-REQUEST_DELAY = 3   # in seconds
-ADDITIONAL_DELAY_PER_TRY = 1
-last_request = 0
-def get_request(session: requests.Session, url: str, attempt: int = 0) -> requests.Response:
-    global last_request, REQUEST_DELAY, ADDITIONAL_DELAY_PER_TRY
-    
-    current_delay = REQUEST_DELAY + (ADDITIONAL_DELAY_PER_TRY * attempt)
-    elapsed_time = time.time() - last_request
-    to_wait = current_delay - elapsed_time
-
-    if to_wait > 0:
-        log.info(f"waiting {to_wait} at attempt {attempt}: {url}")
-        time.sleep(to_wait)
-
-    last_request = time.time()
-    resp = session.get(url, headers=headers)
-
-    if resp.status_code == 429:
-        return get_request(session, url, attempt=attempt + 1)
-    
-    return resp
 
 
 class Asset:
@@ -113,30 +89,13 @@ class Asset:
     def relpath(self) -> str:
         return f"static/{self.filename}"
 
-    def __init__(self, url: str, session: Optional[requests.Session] = None):
+    def __init__(self, url: str, connection: Optional[Connection] = None):
         self.url = url
-        self.session = session or requests.Session()
+        self.connection = connection or Connection()
 
-        self.fetch()
-
-    def fetch(self):
-        temp = Path(temp_path, self.filename)
-
-        if temp.exists():
-            self.content = temp.read_bytes()
-            self.success = True
-            return
-        
-        try:
-            r = get_request(self.session, self.url)
-            self.content = r.content
-            temp.write_bytes(r.content)
-            self.success = True
-        except requests.HTTPError as e:
-            log.warning(
-                f'Issue fetching asset {self.url} because "{e.response.status_code}: {e.response.reason}"'
-            )
-
+        resp = self.connection.get(self.url)
+        self.content = resp.content
+        self.success = True
 
 
 class ScribbleChapter:
@@ -147,11 +106,11 @@ class ScribbleChapter:
     text: str   # HTML content of chapter
     date: arrow.Arrow
 
-    def __init__(self, parent: ScribbleBook, url: str, session: cloudscraper.CloudScraper):
+    def __init__(self, parent: ScribbleBook, url: str, connection: Connection):
         self.parent = parent
         self.source_url = url
 
-        self.session = session
+        self.connection = connection
         self.add_asset = self.parent.add_asset
 
     def __str__(self):
@@ -165,7 +124,7 @@ class ScribbleChapter:
         )
     
     def load(self):
-        resp = get_request(self.session, self.source_url)
+        resp = self.connection.get(self.source_url)
         soup = BeautifulSoup(resp.text, "lxml")
 
         if self.parent.disable_author_quotes:
@@ -284,7 +243,13 @@ class ScribbleBook:
         self.tags = []
 
         self.chapters: List[ScribbleChapter] = []
-        self.session = cloudscraper.create_scraper()
+
+        self.connection = Connection(
+            session=cloudscraper.create_scraper(),
+            request_delay=3,
+            additional_delay_per_try=1,
+            max_retries=10,
+        )
 
         if file_name is not None:
             self.file_name = file_name
@@ -295,7 +260,7 @@ class ScribbleBook:
         if url.strip() == "":
             return
         
-        a = Asset(url, self.session)
+        a = Asset(url, self.connection)
         if a.success:
             self.assets[a.url] = a
             return a
@@ -325,7 +290,7 @@ class ScribbleBook:
         self.slug = _parts[-1]
         self.identifier = _parts[-2]
 
-        resp = get_request(self.session, self.source_url)
+        resp = self.connection.get(self.source_url)
         soup = BeautifulSoup(resp.text, "lxml")
 
         for tag in soup.find_all(lambda x: x.has_attr("lang")):
@@ -375,19 +340,19 @@ class ScribbleBook:
             page_count = min(page_count, limit)
 
         for page in range(1, page_count + 1):
-            chapter_resp = self.session.post(
+            chapter_resp = self.connection.post(
                 "https://www.scribblehub.com/wp-admin/admin-ajax.php",
                 {
                     "action": "wi_getreleases_pagination",
                     "pagenum": page,
                     "mypostid": self.identifier,
                 },
-                headers=headers,
+                cache_identifier=f"pagenum{page}mypostid{self.identifier}",
             )
 
             chapter_soup = BeautifulSoup(chapter_resp.text, "lxml")
             for chapter_tag in chapter_soup.find_all(class_="toc_w"):
-                chapter = ScribbleChapter(self, chapter_tag.a["href"], self.session)
+                chapter = ScribbleChapter(self, chapter_tag.a["href"], self.connection)
                 chapter.index = int(chapter_tag["order"])
                 chapter.title = chapter_tag.a.text
                 chapter.date = arrow.get(
