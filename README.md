@@ -16,7 +16,7 @@ This tool scrapes books from [ScribbleHub](https://www.scribblehub.com/) and con
 ## Installation
 
 ```bash
-pip install scribble-to-epub
+pip install scribblehub-to-epub
 ```
 
 ## Usage
