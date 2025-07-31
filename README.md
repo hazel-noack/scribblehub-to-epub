@@ -1,5 +1,7 @@
 # Scribble to EPUB
 
+![publishing workflow](https://github.com/hazel-noack/scribblehub-to-epub/actions/workflows/python-publish.yml/badge.svg)
+
 A command-line tool to convert ScribbleHub stories into EPUB format.
 
 ## Description
