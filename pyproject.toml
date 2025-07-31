@@ -25,6 +25,7 @@ license-files = [
 
 [project.scripts]
 scribble-to-epub = "scribble_to_epub.__main__:cli"
+scribblehub-to-epub = "scribble_to_epub.__main__:cli"
 
 [project.urls]
 Homepage = "https://github.com/hazel-noack/scribblehub-to-epub"
