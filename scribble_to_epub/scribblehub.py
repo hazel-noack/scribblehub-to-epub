@@ -15,7 +15,7 @@ from codecs import encode
 from hashlib import sha1
 from pathlib import Path
 import uuid
-from python_requests import Connection, set_cache_directory
+from easy_requests import Connection, set_cache_directory
 
 from . import __name__
 
